@@ -1,0 +1,506 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage[colorlinks=true,linkcolor=blue]{hyperref}
+
+\lstset{
+  language=Octave,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue},
+  commentstyle=\color{green!45!black},
+  stringstyle=\color{red!60!black},
+  numbers=left, numberstyle=\tiny\color{gray},
+  frame=single, breaklines=true, columns=fullflexible,
+  showstringspaces=false, upquote=true
+}
+
+% Figure helper: shows the PNG saved by the Octave script (placeholder box if not yet generated)
+\newcommand{\fig}[2]{%
+  \begin{figure}[H]\centering
+  \IfFileExists{#1}{\includegraphics[width=0.85\textwidth]{#1}}%
+  {\fbox{\parbox{0.8\textwidth}{\centering Run the script to generate \texttt{\detokenize{#1}}}}}
+  \caption{#2}\end{figure}}
+
+\newcommand{\sinc}{\mathrm{sinc}}
+
+\title{EC2001E -- Signals and Systems\\Simulation 01: Fourier Series and Fourier Transform}
+\author{YourName \quad RollNumber}
+\date{October 2026}
+
+\begin{document}
+\maketitle
+
+\section*{Common notes}
+\begin{itemize}
+  \item Software: GNU Octave. Each script is self-contained; save it as a \texttt{.m} file and run it. Each script saves its plots as PNG files that are picked up by this report.
+  \item All periodic signals in Figures 1--3 have period $T=1$~s, so $\omega_0 = 2\pi/T = 2\pi$ rad/s.
+  \item Definitions used:
+  \begin{align*}
+    x(t) &= \sum_{n=-\infty}^{\infty} c_n e^{jn\omega_0 t}, \qquad c_n = \frac1T\int_T x(t)e^{-jn\omega_0 t}\,dt\\
+    x(t) &= a_0 + \sum_{n=1}^{\infty} a_n\cos(n\omega_0 t) + \sum_{n=1}^{\infty} b_n\sin(n\omega_0 t)\\
+    a_0 &= \frac1T\int_T x\,dt,\quad a_n = \frac2T\int_T x\cos(n\omega_0 t)\,dt,\quad b_n=\frac2T\int_T x\sin(n\omega_0 t)\,dt
+  \end{align*}
+  \item Relations: $c_0=a_0$, $c_n=\dfrac{a_n-jb_n}{2}$, $c_{-n}=c_n^*$ for real $x(t)$, and $|c_n|=\tfrac12\sqrt{a_n^2+b_n^2}$.
+  \item ``First $N$ harmonics'' means the partial sum over $n=1,\dots,N$ (harmonics with zero coefficient contribute nothing).
+\end{itemize}
+
+%==========================================================
+\section{Question 1: Square wave $x_1(t)$}
+%==========================================================
+From Fig.~1: $x_1(t)=+1$ for $0<t<0.5$ and $-1$ for $0.5<t<1$, repeated with period 1. It is an \emph{odd} function, hence $a_0=0$ and $a_n=0$.
+
+\subsection{Part (a): Fourier series}
+\textbf{Exponential coefficients.}
+\begin{align*}
+c_n &= \int_0^{0.5}e^{-j2\pi nt}dt-\int_{0.5}^{1}e^{-j2\pi nt}dt
+ = \frac{1-e^{-j\pi n}}{j2\pi n}-\frac{e^{-j\pi n}-e^{-j2\pi n}}{j2\pi n}
+ = \frac{1-(-1)^n}{j\pi n}
+\end{align*}
+\[
+c_n=\begin{cases}\dfrac{2}{j\pi n}=-j\dfrac{2}{\pi n}, & n\ \text{odd}\\[2mm] 0, & n\ \text{even (including } n=0)\end{cases}
+\]
+
+\textbf{(i) Exponential Fourier series}
+\[
+x_1(t)=\sum_{\substack{n=-\infty\\ n\ \text{odd}}}^{\infty}\frac{2}{j\pi n}\,e^{j2\pi nt}
+\]
+
+\textbf{(ii) Trigonometric Fourier series.} $a_0=0$, $a_n=0$, and $b_n=j(c_n-c_{-n})=-2\,\mathrm{Im}\{c_n\}$:
+\[
+b_n=\begin{cases}\dfrac{4}{\pi n}, & n\ \text{odd}\\ 0,& n\ \text{even}\end{cases}
+\qquad
+x_1(t)=\frac4\pi\sum_{n=1,3,5,\dots}^{\infty}\frac{1}{n}\sin(2\pi nt)
+=\frac4\pi\Big[\sin2\pi t+\tfrac13\sin6\pi t+\tfrac15\sin10\pi t+\cdots\Big]
+\]
+
+\textbf{Line spectra.} Magnitude $|c_n|=\dfrac{2}{\pi|n|}$ for odd $n$ (decays as $1/n$); phase $\angle c_n=-\pi/2$ for $n>0$ and $+\pi/2$ for $n<0$ (odd $n$ only). Only odd harmonics are present.
+
+\begin{lstlisting}
+% ---------- q1_spectra.m ----------
+clear; close all; clc;
+T = 1; w0 = 2*pi/T;
+N = 15; n = -N:N;
+odd = mod(abs(n),2) == 1;
+cn = zeros(size(n));
+cn(odd) = 2./(1j*pi*n(odd));
+
+figure(1);
+subplot(2,1,1); stem(n*w0, abs(cn), 'filled'); grid on;
+xlabel('\omega (rad/s)'); ylabel('|c_n|'); title('x_1(t): magnitude spectrum');
+subplot(2,1,2); stem(n*w0, angle(cn).*odd, 'filled'); grid on;
+xlabel('\omega (rad/s)'); ylabel('\angle c_n (rad)'); title('x_1(t): phase spectrum');
+print -dpng q1_exp_spectra.png
+
+% trigonometric line spectrum
+nn = 1:N; bn = (4./(nn*pi)).*(mod(nn,2)==1);
+figure(2); stem(nn*w0, bn, 'filled'); grid on;
+xlabel('\omega (rad/s)'); ylabel('b_n');
+title('x_1(t): trigonometric spectrum (a_n = 0)');
+print -dpng q1_trig_spectra.png
+\end{lstlisting}
+
+\fig{q1_exp_spectra.png}{Exponential line spectra of $x_1(t)$.}
+\fig{q1_trig_spectra.png}{Trigonometric line spectrum of $x_1(t)$.}
+
+\subsection{Part (b): Partial sums}
+\[
+x_1^{(N)}(t)=\frac4\pi\sum_{\substack{n=1\\ n\ \text{odd}}}^{N}\frac1n\sin(2\pi nt)
+\]
+
+\begin{lstlisting}
+% ---------- q1_partial.m ----------
+1;
+function xN = sq_partial(N, t, w0)
+  xN = zeros(size(t));
+  for k = 1:2:N                      % only odd harmonics are non-zero
+    xN += (4/(k*pi))*sin(k*w0*t);
+  end
+end
+
+clear; close all; clc;
+w0 = 2*pi; t = linspace(-2, 2, 4001);
+x1 = sign(sin(w0*t));                % original square wave
+Ns = [1 5 50];
+
+figure(3);
+for i = 1:3
+  xN = sq_partial(Ns(i), t, w0);
+  subplot(3,1,i);
+  plot(t, x1, 'k--', t, xN, 'b', 'LineWidth', 1.2); grid on;
+  ylim([-1.5 1.5]); ylabel('x_1(t)');
+  title(sprintf('First %d harmonic(s)', Ns(i)));
+  fprintf('N = %2d : max of partial sum = %.4f\n', Ns(i), max(xN));
+end
+xlabel('t (s)');
+print -dpng q1_partial.png
+\end{lstlisting}
+
+\fig{q1_partial.png}{Partial sums of $x_1(t)$ with $N=1,5,50$ harmonics (dashed: original).}
+
+\textbf{Interpretation.}
+\begin{itemize}
+  \item $N=1$: a single sinusoid of amplitude $4/\pi\approx1.27$; it has the correct fundamental frequency, sign and zero crossings, but is only a rough approximation.
+  \item $N=5$ (harmonics 1, 3, 5): clearly square-like, with ripples and overshoot near the jumps.
+  \item $N=50$ (25 non-zero harmonics): flat tops are almost flat and the edges are very steep. The ripples are squeezed towards the discontinuities, but the overshoot \emph{height does not shrink} (about 1.18).
+  \item More harmonics improve the approximation in the mean-square sense, but convergence near jumps is non-uniform.
+\end{itemize}
+
+\subsection{Part (c): Gibbs phenomenon}
+At a jump discontinuity the partial sums overshoot the signal on both sides of the jump. As $N$ increases:
+\begin{itemize}
+  \item the ripple frequency increases and the width of the overshoot lobe shrinks as $\sim1/N$,
+  \item but the \textbf{peak overshoot tends to a constant, about 8.95\% of the jump height}; it does not vanish.
+\end{itemize}
+For $x_1$ the jump is 2, so the peak of the partial sum is $\approx 1+0.0895\times2\approx1.18$ (the printed \texttt{max} values should approach this). At the jump itself the series converges to the midpoint (0). The effect arises because truncation convolves $x_1$ with a Dirichlet kernel (sinc-like, with side lobes). It can be reduced by windowing the coefficients (Fej\'er/$\sigma$-approximation, Lanczos, Hamming). The mean-square error still tends to zero, since $x_1$ has finite power.
+
+%==========================================================
+\section{Question 2: Triangular wave $x_2(t)$}
+%==========================================================
+From Fig.~2: $x_2(t)=4|t|$ for $|t|\le0.5$, repeated with period 1 (values between 0 and 2, minima at integer $t$). It is \emph{even}, so $b_n=0$.
+
+\subsection{Part (a): Fourier series}
+\[
+a_0=\frac1T\int_{-0.5}^{0.5}4|t|\,dt = 8\cdot\frac{(0.5)^2}{2}=1,
+\qquad
+a_n=2\int_{-0.5}^{0.5}4|t|\cos(2\pi nt)\,dt=16\int_0^{0.5}t\cos(2\pi nt)\,dt
+\]
+Using $\int t\cos(at)\,dt=\dfrac{t\sin at}{a}+\dfrac{\cos at}{a^2}$ with $a=2\pi n$:
+\[
+a_n=16\cdot\frac{(-1)^n-1}{4\pi^2n^2}=\frac{4[(-1)^n-1]}{\pi^2n^2}
+=\begin{cases}-\dfrac{8}{\pi^2n^2}, & n\ \text{odd}\\ 0, & n\ \text{even}\end{cases}
+\]
+
+\textbf{(i) Exponential series.} $c_0=1$ and $c_n=a_n/2=-\dfrac{4}{\pi^2n^2}$ for odd $n$ (real, both signs of $n$); zero for even $n\ne0$:
+\[
+x_2(t)=1-\frac{4}{\pi^2}\sum_{\substack{n=-\infty\\ n\ \text{odd}}}^{\infty}\frac{1}{n^2}e^{j2\pi nt}
+\]
+
+\textbf{(ii) Trigonometric series.}
+\[
+x_2(t)=1-\frac{8}{\pi^2}\sum_{n=1,3,5,\dots}^{\infty}\frac{1}{n^2}\cos(2\pi nt)
+\]
+Check at $t=0$: $1-\frac{8}{\pi^2}\cdot\frac{\pi^2}{8}=0$.
+
+\textbf{Line spectra.} $|c_0|=1$ and $|c_n|=\dfrac{4}{\pi^2n^2}$ for odd $n$. Phase: $0$ at $n=0$ and $\pi$ at odd $n$ (since $c_n<0$).
+
+\begin{lstlisting}
+% ---------- q2_spectra.m ----------
+clear; close all; clc;
+w0 = 2*pi; N = 15; n = -N:N;
+odd = mod(abs(n),2) == 1;
+cn = zeros(size(n));
+cn(odd)  = -4./(pi^2*n(odd).^2);
+cn(n==0) = 1;
+
+figure(1);
+subplot(2,1,1); stem(n*w0, abs(cn), 'filled'); grid on;
+xlabel('\omega (rad/s)'); ylabel('|c_n|'); title('x_2(t): magnitude spectrum');
+subplot(2,1,2); stem(n*w0, angle(cn).*(abs(cn)>0), 'filled'); grid on;
+xlabel('\omega (rad/s)'); ylabel('\angle c_n (rad)'); title('x_2(t): phase spectrum');
+print -dpng q2_exp_spectra.png
+
+nn = 0:N; an = zeros(size(nn));
+an(1) = 1;                                   % a0
+k = nn(2:end); an(2:end) = -8./(pi^2*k.^2).*(mod(k,2)==1);
+figure(2); stem(nn*w0, an, 'filled'); grid on;
+xlabel('\omega (rad/s)'); ylabel('a_n');
+title('x_2(t): trigonometric spectrum (b_n = 0)');
+print -dpng q2_trig_spectra.png
+\end{lstlisting}
+
+\fig{q2_exp_spectra.png}{Exponential line spectra of $x_2(t)$.}
+\fig{q2_trig_spectra.png}{Trigonometric line spectrum of $x_2(t)$.}
+
+\subsection{Part (b): Partial sums}
+\begin{lstlisting}
+% ---------- q2_partial.m ----------
+1;
+function xN = tri_partial(N, t, w0)
+  xN = ones(size(t));                          % a0 = 1
+  for k = 1:2:N
+    xN += -(8/(pi^2*k^2))*cos(k*w0*t);
+  end
+end
+
+clear; close all; clc;
+w0 = 2*pi; t = linspace(-2, 2, 4001);
+x2 = 4*abs(t - round(t));                      % original triangular wave
+Ns = [1 5 50];
+
+figure(3);
+for i = 1:3
+  xN = tri_partial(Ns(i), t, w0);
+  subplot(3,1,i);
+  plot(t, x2, 'k--', t, xN, 'b', 'LineWidth', 1.2); grid on;
+  ylim([-0.5 2.5]); ylabel('x_2(t)');
+  title(sprintf('First %d harmonic(s)', Ns(i)));
+  fprintf('N = %2d : max = %.4f, min = %.4f\n', Ns(i), max(xN), min(xN));
+end
+xlabel('t (s)');
+print -dpng q2_partial.png
+\end{lstlisting}
+
+\fig{q2_partial.png}{Partial sums of $x_2(t)$ with $N=1,5,50$ harmonics (dashed: original).}
+
+\textbf{Interpretation.}
+\begin{itemize}
+  \item $N=1$: $1-\frac{8}{\pi^2}\cos2\pi t$ already resembles the triangle (correct dc level; peaks about 1.81 instead of 2).
+  \item $N=5$: nearly indistinguishable from the triangle except for slight rounding at the corners.
+  \item $N=50$: essentially exact. Convergence is much faster than for the square wave because $|c_n|\propto1/n^2$.
+\end{itemize}
+
+\subsection{Part (c): Gibbs phenomenon}
+$x_2(t)$ is \emph{continuous} (only its derivative has jumps), so there is \textbf{no Gibbs overshoot}: the partial sums converge uniformly to $x_2(t)$ and the roughly 9\% overshoot seen for $x_1$ is absent. The coefficients decay as $1/n^2$ (continuous signal with slope discontinuities) versus $1/n$ for a signal with jumps. The only visible effect is a small rounding of the sharp corners, which vanishes as $N$ grows. Gibbs ringing is therefore tied to jump discontinuities.
+
+%==========================================================
+\section{Question 3: Impulse train $x_3(t)$}
+%==========================================================
+From Fig.~3: $x_3(t)=\sum_{k=-\infty}^{\infty}\delta(t-k)$, unit-area impulses at integers ($T=1$). It is even, so $b_n=0$.
+
+\subsection{Part (a): Fourier series}
+\[
+c_n=\frac1T\int_{-0.5}^{0.5}\delta(t)e^{-jn\omega_0t}dt=1\quad\text{for all }n
+\]
+\textbf{(i) Exponential series}
+\[
+x_3(t)=\sum_{n=-\infty}^{\infty}e^{j2\pi nt}
+\]
+\textbf{(ii) Trigonometric series:} $a_0=1$, $a_n=2c_n=2$, $b_n=0$:
+\[
+x_3(t)=1+2\sum_{n=1}^{\infty}\cos(2\pi nt)
+\]
+\textbf{Line spectra.} $|c_n|=1$ for all $n$ (flat, infinite bandwidth) and $\angle c_n=0$.
+
+\begin{lstlisting}
+% ---------- q3_spectra.m ----------
+clear; close all; clc;
+w0 = 2*pi; N = 15; n = -N:N;
+cn = ones(size(n));
+
+figure(1);
+subplot(2,1,1); stem(n*w0, abs(cn), 'filled'); grid on; ylim([0 1.5]);
+xlabel('\omega (rad/s)'); ylabel('|c_n|'); title('x_3(t): magnitude spectrum');
+subplot(2,1,2); stem(n*w0, angle(cn), 'filled'); grid on; ylim([-1 1]);
+xlabel('\omega (rad/s)'); ylabel('\angle c_n (rad)'); title('x_3(t): phase spectrum');
+print -dpng q3_exp_spectra.png
+
+nn = 0:N; an = [1, 2*ones(1,N)];
+figure(2); stem(nn*w0, an, 'filled'); grid on;
+xlabel('\omega (rad/s)'); ylabel('a_n');
+title('x_3(t): trigonometric spectrum (b_n = 0)');
+print -dpng q3_trig_spectra.png
+\end{lstlisting}
+
+\fig{q3_exp_spectra.png}{Exponential line spectra of $x_3(t)$.}
+\fig{q3_trig_spectra.png}{Trigonometric line spectrum of $x_3(t)$.}
+
+\subsection{Part (b): Partial sums}
+\[
+x_3^{(N)}(t)=1+2\sum_{n=1}^{N}\cos(2\pi nt)=\sum_{n=-N}^{N}e^{j2\pi nt}=\frac{\sin\big((2N+1)\pi t\big)}{\sin(\pi t)}
+\]
+This is the Dirichlet kernel. Its peak at $t=k$ is $2N+1$ (that is 3, 11, 101 for $N=1,5,50$), the main-lobe width is about $2/(2N+1)$, and the area per period stays equal to 1.
+
+\begin{lstlisting}
+% ---------- q3_partial.m ----------
+1;
+function xN = imp_partial(N, t, w0)
+  xN = ones(size(t));
+  for k = 1:N
+    xN += 2*cos(k*w0*t);
+  end
+end
+
+clear; close all; clc;
+w0 = 2*pi; t = linspace(-2, 2, 40001);
+Ns = [1 5 50];
+
+figure(3);
+for i = 1:3
+  xN = imp_partial(Ns(i), t, w0);
+  subplot(3,1,i);
+  plot(t, xN, 'b', 'LineWidth', 1.0); hold on;
+  stem(-2:2, ones(1,5), 'k^', 'filled');       % ideal impulses (area 1)
+  grid on; ylabel('x_3(t)'); xlim([-2 2]);
+  title(sprintf('First %d harmonic(s): peak = %d', Ns(i), 2*Ns(i)+1));
+end
+xlabel('t (s)');
+print -dpng q3_partial.png
+\end{lstlisting}
+
+\fig{q3_partial.png}{Partial sums of $x_3(t)$ with $N=1,5,50$ harmonics (stems: ideal impulses).}
+
+\textbf{Interpretation.}
+\begin{itemize}
+  \item $N=1$: a raised cosine $1+2\cos2\pi t$ with broad peaks.
+  \item $N=5$: peaks become narrower and taller (height 11), with small ripples in between.
+  \item $N=50$: very narrow, tall peaks (height 101) with rapidly oscillating low-amplitude side lobes; this approaches the ideal impulse train at $t=0,\pm1,\pm2$.
+  \item The partial sums do not converge pointwise (peak height $\to\infty$); they converge only in the sense of distributions, i.e.\ $\int x_3^{(N)}\phi\,dt\to\int x_3\phi\,dt$ for smooth $\phi$.
+\end{itemize}
+
+\subsection{Part (c): Note on Gibbs phenomenon}
+An impulse train is an extreme case: the ``jump'' is infinite, so the finite-jump Gibbs overshoot (about 9\%) is not defined. The ringing seen in the plots is the side-lobe structure of the Dirichlet kernel; the peak grows as $2N+1$ while the lobes narrow as $1/N$, so the energy concentrates at the impulse locations. Since $|c_n|=1$ does not decay, the series does not converge in the ordinary sense. Fej\'er (Ces\`aro) averaging replaces the Dirichlet kernel by the non-negative Fej\'er kernel and removes the negative side lobes (ringing).
+
+%==========================================================
+\section{Question 4: Rectangular pulse $x_4(t)=\mathrm{rect}(t)$}
+%==========================================================
+$\mathrm{rect}(t)=1$ for $|t|<0.5$ and $0$ otherwise.
+
+\subsection{Part (a): Fourier transform}
+\[
+X_4(\omega)=\int_{-1/2}^{1/2}e^{-j\omega t}dt=\frac{e^{-j\omega/2}-e^{j\omega/2}}{-j\omega}
+=\frac{2\sin(\omega/2)}{\omega}=\frac{\sin(\omega/2)}{\omega/2}=\sinc\!\Big(\frac{\omega}{2\pi}\Big)
+\]
+where $\sinc(x)=\sin(\pi x)/(\pi x)$. $X_4(\omega)$ is real and even, with $X_4(0)=1$ and zeros at $\omega=\pm2\pi,\pm4\pi,\dots$
+\begin{itemize}
+  \item Magnitude: $|X_4(\omega)|=\left|\dfrac{\sin(\omega/2)}{\omega/2}\right|$.
+  \item Phase: $0$ where $X_4>0$ and $\pm\pi$ where $X_4<0$ (the sign alternates from lobe to lobe).
+\end{itemize}
+
+\begin{lstlisting}
+% ---------- q4a_spectrum.m ----------
+1;
+function y = sincw(w)                 % sin(w/2)/(w/2), equal to 1 at w = 0
+  y = ones(size(w));
+  idx = (w ~= 0);
+  y(idx) = sin(w(idx)/2)./(w(idx)/2);
+end
+
+clear; close all; clc;
+w = linspace(-40, 40, 8001);
+X = sincw(w);
+
+figure(1);
+subplot(2,1,1); plot(w, abs(X), 'b', 'LineWidth', 1.2); grid on;
+xlabel('\omega (rad/s)'); ylabel('|X_4(\omega)|'); title('Magnitude spectrum of rect(t)');
+subplot(2,1,2); plot(w, pi*(X<0), 'r', 'LineWidth', 1.2); grid on;
+xlabel('\omega (rad/s)'); ylabel('\angle X_4(\omega) (rad)'); title('Phase spectrum of rect(t)');
+ylim([-0.5 3.7]);
+print -dpng q4a_spectra.png
+\end{lstlisting}
+
+\fig{q4a_spectra.png}{Magnitude and phase spectra of $\mathrm{rect}(t)$.}
+
+\subsection{Part (b): Approximation of $x_4(t)$ from $X_4(\omega)$}
+Using the inverse Fourier transform with the spectrum sampled at $\omega_k=k\,\Delta\omega$, $k=-K,\dots,K$ ($N=2K+1$ frequency points, spacing $\Delta\omega=0.1$ rad/s, bandwidth $W=K\Delta\omega$):
+\[
+\tilde x_4(t)=\frac{1}{2\pi}\int_{-W}^{W}X_4(\omega)e^{j\omega t}d\omega
+\approx\frac{\Delta\omega}{2\pi}\sum_{k=-K}^{K}X_4(k\Delta\omega)e^{jk\Delta\omega t}
+=\frac{\Delta\omega}{2\pi}\Big[X_4(0)+2\sum_{k=1}^{K}X_4(k\Delta\omega)\cos(k\Delta\omega t)\Big]
+\]
+The last form uses the fact that $X_4$ is real and even.
+
+\begin{lstlisting}
+% ---------- q4b_approx.m ----------
+1;
+function y = sincw(w)
+  y = ones(size(w));
+  idx = (w ~= 0);
+  y(idx) = sin(w(idx)/2)./(w(idx)/2);
+end
+function xr = recon(K, dw, t)
+  w  = (1:K)*dw;                         % positive frequencies
+  Xk = sincw(w);
+  xr = (dw/(2*pi))*(1 + 2*(cos(t(:)*w)*Xk(:)));   % X(0) = 1
+  xr = xr.';
+end
+
+clear; close all; clc;
+dw = 0.1;
+t  = linspace(-2, 2, 2001);
+x4 = double(abs(t) < 0.5);
+
+Ks = [10 50 200 1000];        % N = 2K+1 points, W = K*dw = 1, 5, 20, 100 rad/s
+figure(2);
+for i = 1:4
+  xr = recon(Ks(i), dw, t);
+  subplot(2,2,i);
+  plot(t, x4, 'k--', t, xr, 'b', 'LineWidth', 1.2); grid on;
+  ylim([-0.3 1.4]); xlabel('t (s)');
+  title(sprintf('N = %d points (W = %g rad/s)', 2*Ks(i)+1, Ks(i)*dw));
+  fprintf('K = %4d: max(x~) = %.4f\n', Ks(i), max(xr));
+end
+print -dpng q4b_approx.png
+\end{lstlisting}
+
+\fig{q4b_approx.png}{Original $x_4(t)$ (dashed) and approximation $\tilde x_4(t)$ for increasing numbers of frequency points.}
+
+\textbf{Observations.} With few frequency points the reconstruction is a smooth bump that only roughly resembles the pulse. As $N$ (bandwidth) increases, the edges at $t=\pm0.5$ become steeper, the top becomes flatter, and the ripple moves closer to the edges. The overshoot near the edges stays at about 9\% ($\max\tilde x_4\approx1.09$), which is the Gibbs phenomenon again, since the pulse has jump discontinuities.
+
+\subsection{Part (c): Mean-square error versus number of frequency points}
+\[
+\mathrm{MSE}=\frac{1}{M}\sum_{m=1}^{M}\big[x_4(t_m)-\tilde x_4(t_m)\big]^2
+\]
+Theory: the energy in the discarded band is $\dfrac{1}{2\pi}\int_{|\omega|>W}|X_4|^2d\omega\approx\dfrac{2}{\pi W}$, so over a window of length 4~s
+\[
+\mathrm{MSE}\approx\frac{1}{2\pi W}=\frac{1}{2\pi K\Delta\omega}\ \propto\ \frac1N .
+\]
+
+\begin{lstlisting}
+% ---------- q4c_mse.m ----------
+1;
+function y = sincw(w)
+  y = ones(size(w));
+  idx = (w ~= 0);
+  y(idx) = sin(w(idx)/2)./(w(idx)/2);
+end
+function xr = recon(K, dw, t)
+  w  = (1:K)*dw;
+  Xk = sincw(w);
+  xr = (dw/(2*pi))*(1 + 2*(cos(t(:)*w)*Xk(:)));
+  xr = xr.';
+end
+
+clear; close all; clc;
+dw = 0.1;
+t  = linspace(-2, 2, 2001);
+x4 = double(abs(t) < 0.5);
+
+Ks  = unique(round(logspace(0, 3.3, 30)));     % 1 ... about 2000
+mse = zeros(size(Ks));
+for i = 1:numel(Ks)
+  mse(i) = mean((x4 - recon(Ks(i), dw, t)).^2);
+end
+Npts = 2*Ks + 1;
+
+figure(3);
+loglog(Npts, mse, 'bo-', 'LineWidth', 1.2); hold on;
+loglog(Npts, 1./(2*pi*Ks*dw), 'r--', 'LineWidth', 1.0);   % approximate theory
+grid on; xlabel('Number of frequency points N'); ylabel('MSE');
+legend('Simulated', 'Approx. 1/(2\pi W)');
+title('MSE vs number of frequency-domain points');
+print -dpng q4c_mse.png
+\end{lstlisting}
+
+\fig{q4c_mse.png}{MSE between $x_4(t)$ and $\tilde x_4(t)$ versus the number of frequency points $N$.}
+
+\textbf{Inferences.}
+\begin{itemize}
+  \item The MSE decreases monotonically as more frequency points (larger bandwidth) are used. On the log--log plot it is close to a straight line of slope $-1$, i.e.\ $\mathrm{MSE}\propto1/N$.
+  \item The error never reaches exactly zero for finite $N$, because the rectangular pulse is not band-limited (its spectrum has infinitely many sidelobes decaying as $1/\omega$).
+  \item Although the MSE tends to zero, the peak error near the discontinuities does not (Gibbs). The error energy is concentrated in ever narrower regions around $t=\pm0.5$, so the MSE is insensitive to the persistent 9\% overshoot.
+  \item Practical consequence: a good rectangular-pulse approximation needs high bandwidth; a smoother pulse (e.g.\ a triangle with a $1/\omega^2$ spectrum) needs far fewer frequency points for the same MSE.
+\end{itemize}
+
+%==========================================================
+\section*{Conclusions}
+%==========================================================
+\begin{center}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Signal & Smoothness & Coefficient decay & Gibbs phenomenon\\
+\midrule
+Square wave $x_1$ & jumps & $1/n$ & Yes, about 9\% of the jump\\
+Triangular wave $x_2$ & continuous & $1/n^2$ & No\\
+Impulse train $x_3$ & impulses & constant ($c_n=1$) & Not applicable; no pointwise convergence\\
+Rect pulse $x_4$ (FT) & jumps & $1/\omega$ & Yes; MSE falls as $1/N$\\
+\bottomrule
+\end{tabular}
+\end{center}
+The faster the spectrum decays, the smoother the signal and the fewer harmonics are needed for a good approximation.
+
+\end{document}
